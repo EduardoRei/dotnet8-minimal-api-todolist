@@ -1,6 +1,10 @@
+using Asp.Versioning;
+using Asp.Versioning.ApiExplorer;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.OpenApi.Models;
 using MinimalApi.TodoList.Data;
 using MinimalApi.TodoList.Endpoints;
+using MinimalApi.TodoList.Versioning;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddDbContext<TodoDbContext>(options =>
@@ -8,13 +12,27 @@ builder.Services.AddDbContext<TodoDbContext>(options =>
 builder.Services.AddDatabaseDeveloperPageExceptionFilter();
 
 builder.Services.AddEndpointsApiExplorer();
+builder.Services
+    .AddApiVersioning(options =>
+    {
+        options.ReportApiVersions = true;
+
+        options.AssumeDefaultVersionWhenUnspecified = true;
+        options.DefaultApiVersion = new ApiVersion(1, 0);
+        options.ApiVersionReader = new UrlSegmentApiVersionReader();
+    })
+    .AddApiExplorer(options =>
+    {
+        options.GroupNameFormat = "'v'VVV"; 
+        options.SubstituteApiVersionInUrl = true;
+    })
+    .EnableApiVersionBinding();
+
 builder.Services.AddSwaggerGen();
 
-var app = builder.Build();
+builder.Services.ConfigureOptions<ConfigureSwaggerOptions>();
 
-//Implementing Swagger and redirecting at startup
-app.UseSwagger();
-app.UseSwaggerUI(); 
+var app = builder.Build();
 
 app.MapGet("/", context =>
 {
@@ -22,7 +40,22 @@ app.MapGet("/", context =>
     return Task.CompletedTask;
 });
 
-//Adding Endpoint
-app.MapTodoItemsEndpoints();
+var todoItem = app.NewVersionedApi("Todo Item");
+todoItem.MapTodoItemsEndpoints();
+
+app.UseSwagger();
+
+app.UseSwaggerUI(options =>
+{
+    var descriptions = app.DescribeApiVersions();
+
+    foreach (var description in descriptions)
+    {
+        var url = $"/swagger/{description.GroupName}/swagger.json";
+        var name = description.GroupName.ToUpperInvariant();
+        options.SwaggerEndpoint(url, name);
+    }
+});
+
 
 app.Run();
