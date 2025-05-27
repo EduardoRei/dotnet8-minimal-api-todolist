@@ -40,8 +40,7 @@ app.MapGet("/", context =>
     return Task.CompletedTask;
 });
 
-var todoItem = app.NewVersionedApi("Todo Item");
-todoItem.MapTodoItemsEndpoints();
+app.MapTodoItemsEndpoints();
 
 app.UseSwagger();
 

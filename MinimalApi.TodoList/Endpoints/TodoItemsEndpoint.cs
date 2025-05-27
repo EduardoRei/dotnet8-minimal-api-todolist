@@ -12,7 +12,7 @@ namespace MinimalApi.TodoList.Endpoints
         private const string BaseRoute = "/api/v{version:apiVersion}/todoitems";
         private const string ByIdRoute = BaseRoute + "/{id}";
         
-        public static void MapTodoItemsEndpoints(this IVersionedEndpointRouteBuilder app)
+        public static void MapTodoItemsEndpoints(this WebApplication app)
         {
             var versionSet = app.NewApiVersionSet()
                 .HasApiVersion(1, 0)
