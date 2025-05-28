@@ -1,7 +1,6 @@
 using Asp.Versioning;
-using Asp.Versioning.ApiExplorer;
+using Asp.Versioning.Conventions;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.OpenApi.Models;
 using MinimalApi.TodoList.Data;
 using MinimalApi.TodoList.Endpoints;
 using MinimalApi.TodoList.Versioning;
@@ -12,11 +11,10 @@ builder.Services.AddDbContext<TodoDbContext>(options =>
 builder.Services.AddDatabaseDeveloperPageExceptionFilter();
 
 builder.Services.AddEndpointsApiExplorer();
+
 builder.Services
     .AddApiVersioning(options =>
     {
-        options.ReportApiVersions = true;
-
         options.AssumeDefaultVersionWhenUnspecified = true;
         options.DefaultApiVersion = new ApiVersion(1, 0);
         options.ApiVersionReader = new UrlSegmentApiVersionReader();
@@ -40,7 +38,15 @@ app.MapGet("/", context =>
     return Task.CompletedTask;
 });
 
-app.MapTodoItemsEndpoints();
+var versionSet = app.NewApiVersionSet()
+    .HasApiVersion(1, 0)
+    .HasApiVersion(2, 0)
+    .ReportApiVersions()
+    .Build();
+
+RouteGroupBuilder groupBuilder = app.MapGroup("/api/v{version:apiVersion}").WithApiVersionSet(versionSet);
+
+groupBuilder.MapTodoItemsEndpoints();
 
 app.UseSwagger();
 
