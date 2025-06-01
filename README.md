@@ -6,7 +6,7 @@ Este repositório tem como objetivo demonstrar a criação de uma aplicação de
 
 - Aprender a estruturar uma API RESTful com Minimal API no .NET 8
 - Implementar versionamento de endpoints
-- Adicionar autenticação básica ou JWT
+- Adicionar autenticação utilizando AspNetCore.Identity
 - Aplicar boas práticas de organização e manutenção de código
 ## Passos para Executar
 
@@ -30,7 +30,24 @@ Este repositório tem como objetivo demonstrar a criação de uma aplicação de
      docker run -p 5000:5000 dotnet8-todo-api
      ```
 
-Para acessar  utilize as URLs:
+5. Para acessar  utilize as URLs:
 -   API: http://localhost:5000
     
 -   Swagger : http://localhost:5000/swagger
+
+6. Para gerar requisições nos endpoints de TodoList
+
+- Crie um usuário no endpoint /auth/register, passando um e-mail e uma senha que contenha:
+
+     - Pelo menos 6 caracteres
+
+     - Uma letra maiúscula
+
+     - Uma letra minúscula
+
+     - Um número
+
+     - Um caractere especial
+
+- Autentique-se no endpoint /auth/login.
+A aplicação está configurada para utilizar cookies como mecanismo de autenticação, portanto, após o login, o cookie de autenticação será enviado automaticamente nas requisições subsequentes.

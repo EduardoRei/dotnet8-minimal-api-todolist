@@ -9,5 +9,15 @@ namespace MinimalApi.TodoList.Data
             : base(options) { }
 
         public DbSet<TodoItem> Todos => Set<TodoItem>();
+
+        protected override void OnModelCreating(ModelBuilder modelBuilder)
+        {
+            base.OnModelCreating(modelBuilder);
+
+            modelBuilder.Entity<TodoItem>()
+            .HasOne<User>()
+            .WithMany()
+            .HasForeignKey(t => t.UserId);
+        }
     }
 }
