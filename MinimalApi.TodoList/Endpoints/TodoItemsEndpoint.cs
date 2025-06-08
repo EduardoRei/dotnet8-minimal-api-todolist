@@ -1,4 +1,5 @@
 ﻿using Asp.Versioning.Conventions;
+using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.EntityFrameworkCore;
 using MinimalApi.TodoList.Data;
 using MinimalApi.TodoList.DTOs;
@@ -14,100 +15,134 @@ namespace MinimalApi.TodoList.Endpoints
         public static void MapTodoItemsEndpoints(this IEndpointRouteBuilder app)
         {
 
-            app.MapGet("/todoitems", async (TodoDbContext db, HttpContext http) =>
-            {
-                var userId = http.User.FindFirstValue(ClaimTypes.NameIdentifier);
-                return await db.Todos.Where(t => t.UserId == userId)
+            app.MapGet("/todoitems", GetAllTodos);
+
+            app.MapGet("/todoitems/{id}", GetTodoById);
+
+            app.MapDelete("/todoitems/{id}", DeleteTodo);
+
+            app.MapPost("/todoitems", CreateTodo);
+
+            app.MapPut("/todoitems/{id}" + "/ChangeName", ChangeNameTodo);
+
+            app.MapPut("/todoitems/{id}" + "/SetCompleted", SetCompletedTodo);
+
+            app.MapGet("/todoitems/AllCompleted", GetAllCompleted)
+            .MapToApiVersion(2, 0);
+
+            app.MapGet("/todoitems/AllNotCompleted", GetAllNotCompleted)
+            .MapToApiVersion(2, 0);
+        }
+
+        public static async Task<IResult> GetAllTodos(TodoDbContext db, HttpContext http)
+        {
+            var userId = http.User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (userId == null)
+                return Results.Unauthorized();
+
+            var todos = await db.Todos.Where(t => t.UserId == userId)
                 .Select(t => t.ToDto())
                 .ToListAsync();
-            });
 
-            app.MapGet("/todoitems/{id}", async (int id, TodoDbContext db, HttpContext http) =>
+            return Results.Ok(todos);
+        }
+
+        public static async Task<IResult> GetAllNotCompleted(TodoDbContext db, HttpContext http)
+        {
+            var userId = http.User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (userId == null)
+                return Results.Unauthorized();
+
+            var todos = await db.Todos
+                .Where(t => !t.IsComplete && t.UserId == userId)
+                .Select(t => t.ToDto())
+                .ToListAsync();
+
+            return Results.Ok(todos);
+        }
+
+        public static async Task<IResult> GetAllCompleted(TodoDbContext db, HttpContext http)
+        {
+            var userId = http.User.FindFirstValue(ClaimTypes.NameIdentifier);
+
+            if (userId == null)
+                return Results.Unauthorized();
+
+            var todos = await db.Todos
+                .Where(t => t.IsComplete && t.UserId == userId)
+                .Select(t => t.ToDto())
+                .ToListAsync();
+
+            return Results.Ok(todos);
+        }
+
+        public static async Task<IResult> GetTodoById(int id, TodoDbContext db, HttpContext http)
+        {
+            var userId = http.User.FindFirstValue(ClaimTypes.NameIdentifier);
+            var todoItem = await db.Todos.FirstOrDefaultAsync(t => t.Id == id && t.UserId == userId);
+
+            if(todoItem != null)
+                return Results.Ok(todoItem.ToDto());
+
+            return Results.NotFound();
+        }
+
+        public static async Task<IResult> DeleteTodo(int id, TodoDbContext db, HttpContext http)
+        {
+            var userId = http.User.FindFirstValue(ClaimTypes.NameIdentifier);
+            var todoItem = await db.Todos.FirstOrDefaultAsync(t => t.Id == id && t.UserId == userId);
+
+            if (todoItem is null)
+                return TypedResults.NotFound();
+
+            db.Todos.Remove(todoItem);
+            await db.SaveChangesAsync();
+            return TypedResults.NoContent();
+        }
+
+        public static async Task<Created<TodoItemDto>> CreateTodo(CreateTodoItemDto dto, TodoDbContext db, HttpContext http)
+        {
+            var userId = http.User.FindFirstValue(ClaimTypes.NameIdentifier);
+
+            var todoItem = new TodoItem
             {
-                var userId = http.User.FindFirstValue(ClaimTypes.NameIdentifier);
-                var todoItem = await db.Todos.FirstOrDefaultAsync(t => t.Id == id && t.UserId == userId);
+                Name = dto.Name,
+                IsComplete = false,
+                UserId = userId
+            };
 
-                return todoItem is null ? Results.NotFound() : Results.Ok(todoItem.ToDto());
-            });
+            db.Todos.Add(todoItem);
+            await db.SaveChangesAsync();
+            return TypedResults.Created($"/todoitems", todoItem.ToDto());
+        }
 
-            app.MapDelete("/todoitems/{id}", async (int id, TodoDbContext db, HttpContext http) =>
-            {
-                var userId = http.User.FindFirstValue(ClaimTypes.NameIdentifier);
-                var todoItem = await db.Todos.FirstOrDefaultAsync(t => t.Id == id && t.UserId == userId);
+        public static async Task<IResult> SetCompletedTodo(int id, SetCompletedTodoItemDto todo, TodoDbContext db, HttpContext http)
+        {
+            var userId = http.User.FindFirstValue(ClaimTypes.NameIdentifier);
 
-                if (todoItem is null)
-                    return Results.NotFound();
+            var todoItem = await db.Todos.FirstOrDefaultAsync(x => x.Id == id && x.UserId == userId);
+            if (todoItem is null)
+                return TypedResults.NotFound();
 
-                db.Todos.Remove(todoItem);
-                await db.SaveChangesAsync();
-                return Results.NoContent();
-            });
+            if (todoItem.IsComplete == todoItem.IsComplete)
+                return TypedResults.NoContent();
 
-            app.MapPost("/todoitems", async (CreateTodoItemDto dto, TodoDbContext db, HttpContext http) =>
-            {
-                var userId = http.User.FindFirstValue(ClaimTypes.NameIdentifier);
+            todoItem.IsComplete = todoItem.IsComplete;
+            await db.SaveChangesAsync();
+            return TypedResults.NoContent();
+        }
 
-                var todoItem = new TodoItem
-                {
-                    Name = dto.Name,
-                    IsComplete = false,
-                    UserId = userId
-                };
+        public static async Task<IResult> ChangeNameTodo(int id, ChangeNameTodoItemDto todo, TodoDbContext db, HttpContext http)
+        {
+            var userId = http.User.FindFirstValue(ClaimTypes.NameIdentifier);
 
-                db.Todos.Add(todoItem);
-                await db.SaveChangesAsync();
-                return Results.Created($"/todoitems", todoItem.ToDto());
-            });
+            var todoItem = await db.Todos.FirstOrDefaultAsync(x => x.Id == id && x.UserId == userId);
+            if (todoItem is null)
+                return TypedResults.NotFound();
 
-            app.MapPut("/todoitems/{id}" + "/ChangeName", async (int id, ChangeNameTodoItemDto updateTodo, TodoDbContext db, HttpContext http) =>
-            {
-                var userId = http.User.FindFirstValue(ClaimTypes.NameIdentifier);
-
-                var todoItem = await db.Todos.FirstOrDefaultAsync(x => x.Id == id && x.UserId == userId);
-                if (todoItem is null)
-                    return Results.NotFound();
-                todoItem.Name = updateTodo.Name;
-                await db.SaveChangesAsync();
-                return Results.NoContent();
-            });
-
-            app.MapPut("/todoitems/{id}" + "/SetCompleted", async (int id, SetCompletedTodoItemDto updateTodo, TodoDbContext db, HttpContext http) =>
-            {
-                var userId = http.User.FindFirstValue(ClaimTypes.NameIdentifier);
-
-                var todoItem = await db.Todos.FirstOrDefaultAsync(x => x.Id == id && x.UserId == userId);
-                if (todoItem is null)
-                    return Results.NotFound();
-
-                if(todoItem.IsComplete == updateTodo.IsComplete)
-                    return Results.NoContent();
-
-                todoItem.IsComplete = updateTodo.IsComplete;
-                await db.SaveChangesAsync();
-                return Results.NoContent();
-            });
-
-            app.MapGet("/todoitems/AllCompleted", async (TodoDbContext db, HttpContext http) =>
-            {
-                var userId = http.User.FindFirstValue(ClaimTypes.NameIdentifier);
-
-                return await db.Todos
-                    .Where(t => t.IsComplete && t.UserId == userId)
-                    .Select(t => t.ToDto())
-                    .ToListAsync();
-            })
-            .MapToApiVersion(2, 0);
-
-            app.MapGet("/todoitems/AllNotCompleted", async (TodoDbContext db, HttpContext http) =>
-            {
-                var userId = http.User.FindFirstValue(ClaimTypes.NameIdentifier);
-
-                return await db.Todos
-                    .Where(t => !t.IsComplete && t.UserId == userId)
-                    .Select(t => t.ToDto())
-                    .ToListAsync();
-            })
-            .MapToApiVersion(2, 0);
+            todoItem.Name = todo.Name;
+            await db.SaveChangesAsync();
+            return TypedResults.NoContent();
         }
     }
 }
