@@ -1,13 +1,14 @@
 ﻿using Microsoft.AspNetCore.Http.HttpResults;
-using MinimalApi.TodoList.DTOs;
+using MinimalApi.TodoList.DTOs.V2;
 using MinimalApi.TodoList.Endpoints;
+using MinimalApi.TodoList.Enums;
 using MinimalApi.TodoList.Models;
-using MinimalApi.TodoList.Tests.UnitTests.Base.Mock;
 using MinimalApi.TodoList.Tests.UnitTests.Base;
+using MinimalApi.TodoList.Tests.UnitTests.Base.Mock;
 
-namespace MinimalApi.TodoList.Tests.UnitTests.Tests
+namespace MinimalApi.TodoList.Tests.UnitTests.Tests.Endpoints.V2
 {
-    public class TodoItemsEndpointTests
+    public class TodoItemsV2EndpointsTests
     {
         [Fact]
         public async Task GetTodoByID_ReturnsOk_WithUserTodo()
@@ -22,10 +23,10 @@ namespace MinimalApi.TodoList.Tests.UnitTests.Tests
             var context = TestBase.GenerateAuthHttpContext(userId);
 
             // Act
-            var result = await TodoItemsEndpoint.GetTodoById(1,todoContext, context);
+            var result = await TodoItemsEndpoint.GetTodoByIdV2(1, todoContext, context);
 
             // Assert
-            var okResult = Assert.IsType<Ok<TodoItemDto>>(result);
+            var okResult = Assert.IsType<Ok<TodoItemV2Dto>>(result);
             Assert.Equal("Task 1", okResult.Value.Name);
         }
 
@@ -41,8 +42,8 @@ namespace MinimalApi.TodoList.Tests.UnitTests.Tests
 
             var context = TestBase.GenerateAuthHttpContext(userId);
 
-            var result = await TodoItemsEndpoint.GetAllTodos(db, context);
-            var okResult = Assert.IsType<Ok<List<TodoItemDto>>>(result);
+            var result = await TodoItemsEndpoint.GetAllTodosV2(db, context);
+            var okResult = Assert.IsType<Ok<List<TodoItemV2Dto>>>(result);
             Assert.Equal(2, okResult.Value.Count);
         }
 
@@ -58,8 +59,8 @@ namespace MinimalApi.TodoList.Tests.UnitTests.Tests
 
             var context = TestBase.GenerateAuthHttpContext(userId);
 
-            var result = await TodoItemsEndpoint.GetAllCompleted(db, context);
-            var okResult = Assert.IsType<Ok<List<TodoItemDto>>>(result);
+            var result = await TodoItemsEndpoint.GetAllCompletedV2(db, context);
+            var okResult = Assert.IsType<Ok<List<TodoItemV2Dto>>>(result);
             Assert.Single(okResult.Value);
         }
 
@@ -75,8 +76,8 @@ namespace MinimalApi.TodoList.Tests.UnitTests.Tests
 
             var context = TestBase.GenerateAuthHttpContext(userId);
 
-            var result = await TodoItemsEndpoint.GetAllNotCompleted(db, context);
-            var okResult = Assert.IsType<Ok<List<TodoItemDto>>>(result);
+            var result = await TodoItemsEndpoint.GetAllNotCompletedV2(db, context);
+            var okResult = Assert.IsType<Ok<List<TodoItemV2Dto>>>(result);
             Assert.Single(okResult.Value);
         }
 
@@ -86,57 +87,88 @@ namespace MinimalApi.TodoList.Tests.UnitTests.Tests
             await using var db = new MockTodoDb().CreateDbContext();
             var userId = Guid.NewGuid().ToString();
             var context = TestBase.GenerateAuthHttpContext(userId);
+            var date = DateTime.Now;
 
-            var dto = new CreateTodoItemDto ("New Task" );
+            var dto = new CreateTodoItemV2Dto("New Task", date, Enums.CriticalityEnum.Low);
 
-            var result = await TodoItemsEndpoint.CreateTodo(dto, db, context);
+            var result = await TodoItemsEndpoint.CreateTodoV2(dto, db, context);
 
-            var created = Assert.IsType<Created<TodoItemDto>>(result);
+            var created = Assert.IsType<Created<TodoItemV2Dto>>(result);
             Assert.Equal("New Task", created.Value.Name);
+            Assert.Equal(date, created.Value.Deadline);
+            Assert.Equal(CriticalityEnum.Low, created.Value.Criticality);
         }
 
-        [Fact]
-        public async Task DeleteTodo_RemovesItem_WhenExists()
+        [Theory]
+        [InlineData(CriticalityEnum.Blocker, false, typeof(BadRequest<string>))] // Criticality 5 and Incomplete  
+        [InlineData(CriticalityEnum.Blocker, true, typeof(NoContent))]  // Criticality 5 and Complete  
+        [InlineData(CriticalityEnum.Low, false, typeof(NoContent))] // Other Criticality  
+        public async Task DeleteTodo_HandlesCriticalityAndCompletionProperly(
+                   CriticalityEnum criticality, bool isComplete, Type expectedResultType)
         {
+            // Arrange  
             await using var db = new MockTodoDb().CreateDbContext();
             var userId = Guid.NewGuid().ToString();
-            db.Todos.Add(new TodoItem { Id = 1, Name = "To delete", UserId = userId });
+
+            db.Todos.Add(new TodoItem { Id = 1, Name = "Todo Item", UserId = userId, Deadline = DateTime.Now, Criticality = criticality, IsComplete = isComplete });
+
             await db.SaveChangesAsync();
 
             var context = TestBase.GenerateAuthHttpContext(userId);
 
-            var result = await TodoItemsEndpoint.DeleteTodo(1, db, context);
-            Assert.IsType<NoContent>(result);
+            // Act  
+            var result = await TodoItemsEndpoint.DeleteTodoV2(1, db, context);
+
+            // Assert  
+            Assert.IsType(expectedResultType, result);
         }
 
         [Fact]
-        public async Task SetCompletedTodo_SetsAsCompleted_WhenValid()
+        public async Task ChangeCriticalityV2_UpdatesCriticalitySuccessfully()
         {
+            // Arrange
             await using var db = new MockTodoDb().CreateDbContext();
             var userId = Guid.NewGuid().ToString();
-            db.Todos.Add(new TodoItem { Id = 1, Name = "To Complete", IsComplete = false, UserId = userId });
+
+            db.Todos.Add(new TodoItem { Id = 1, Name = "Task", UserId = userId, Criticality = CriticalityEnum.Low });
             await db.SaveChangesAsync();
 
             var context = TestBase.GenerateAuthHttpContext(userId);
-            var dto = new SetCompletedTodoItemDto (true);
+            var newCriticalityDto = new ChangeCriticalityV2Dto( CriticalityEnum.High);
 
-            var result = await TodoItemsEndpoint.SetCompletedTodo(1, dto, db, context);
-            Assert.IsType<NoContent>(result);
+            // Act
+            var result = await TodoItemsEndpoint.ChangeCriticalityV2(1, newCriticalityDto, db, context);
+
+            // Assert
+            var noContentResult = Assert.IsType<NoContent>(result);
+            var updatedTodo = await db.Todos.FindAsync(1);
+            Assert.NotNull(updatedTodo);
+            Assert.Equal(newCriticalityDto.Criticality, updatedTodo.Criticality);
         }
 
         [Fact]
-        public async Task ChangeNameTodo_ChangesName_WhenValid()
+        public async Task ChangeDeadlineV2_UpdatesDeadlineSuccessfully()
         {
+            // Arrange
             await using var db = new MockTodoDb().CreateDbContext();
             var userId = Guid.NewGuid().ToString();
-            db.Todos.Add(new TodoItem { Id = 1, Name = "Old Name", UserId = userId });
+
+            db.Todos.Add(new TodoItem { Id = 1, Name = "Task", UserId = userId, Deadline = DateTime.Now });
             await db.SaveChangesAsync();
 
             var context = TestBase.GenerateAuthHttpContext(userId);
-            var dto = new ChangeNameTodoItemDto ( "New Name" );
+            var newDeadlineDto = new ChangeDeadlineV2Dto(DateTime.Now.AddDays(7));
 
-            var result = await TodoItemsEndpoint.ChangeNameTodo(1, dto, db, context);
-            Assert.IsType<NoContent>(result);
+            // Act
+            var result = await TodoItemsEndpoint.ChangeDeadlineV2(1, newDeadlineDto, db, context);
+
+            // Assert
+            var noContentResult = Assert.IsType<NoContent>(result);
+            var updatedTodo = await db.Todos.FindAsync(1);
+            Assert.NotNull(updatedTodo);
+            Assert.Equal(newDeadlineDto.NewDeadline, updatedTodo.Deadline);
         }
+
+
     }
 }

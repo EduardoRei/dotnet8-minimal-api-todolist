@@ -1,15 +1,13 @@
-﻿using Microsoft.AspNetCore.Http.HttpResults;
-using Microsoft.AspNetCore.Http;
-using MinimalApi.TodoList.DTOs;
+﻿using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http.HttpResults;
+using MinimalApi.TodoList.DTOs.V1;
 using MinimalApi.TodoList.Endpoints;
 using MinimalApi.TodoList.Models;
 using MinimalApi.TodoList.Tests.UnitTests.Base;
 using MinimalApi.TodoList.Tests.UnitTests.Base.Mock;
-using Moq;
-using System.Net;
 using System.Security.Claims;
 
-namespace MinimalApi.TodoList.Tests.UnitTests.Tests
+namespace MinimalApi.TodoList.Tests.UnitTests.Tests.Endpoints.Shared
 {
     public class AuthTests
     {
@@ -22,7 +20,7 @@ namespace MinimalApi.TodoList.Tests.UnitTests.Tests
             var context = new DefaultHttpContext { User = new ClaimsPrincipal() }; // sem identidade
 
             // Act
-            var result = await TodoItemsEndpoint.GetAllTodos(todoContext, context);
+            var result = await TodoItemsEndpoint.GetAllTodosV1(todoContext, context);
 
             // Assert
             Assert.IsType<UnauthorizedHttpResult>(result);
@@ -41,10 +39,10 @@ namespace MinimalApi.TodoList.Tests.UnitTests.Tests
             var context = TestBase.GenerateAuthHttpContext(userId);
 
             // Act
-            var result = await TodoItemsEndpoint.GetAllTodos(todoContext, context);
+            var result = await TodoItemsEndpoint.GetAllTodosV1(todoContext, context);
 
             // Assert
-            var okResult = Assert.IsType<Ok<List<TodoItemDto>>>(result);
+            var okResult = Assert.IsType<Ok<List<TodoItemV1Dto>>>(result);
             Assert.Single(okResult.Value);
             Assert.Equal("Task 1", okResult.Value[0].Name);
         }
